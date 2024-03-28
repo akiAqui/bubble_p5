@@ -7,8 +7,8 @@ const canvasWidth = 800; // キャンバスの幅
 const canvasHeight = 600; // キャンバスの高さ
 const offsetFrequency = 1; // 中心からmaxOffsetの距離をsinカーブで付与するときの周波数
 const dt = 0.1; // 時間の刻み幅
-const P = 10; // 角度のずれの最大値を決めるパラメータ
-const Q = 30; // 中心からの距離のずれの最大値を決めるパラメータ
+const P = 1000; // 角度のずれの最大値を決めるパラメータ
+const Q = 1000; // 中心からの距離のずれの最大値を決めるパラメータ
 
 let points = [];
 let velocities = [];
@@ -20,8 +20,8 @@ let isSimulating = false;
 let pointColors = [];
 let lineColors = [];
 
-let minHue = 0;   // 色相の最小値（0から360の範囲）
-let maxHue = 180; // 色相の最大値（0から360の範囲）
+let minHue = 30;   // 色相の最小値（0から360の範囲）
+let maxHue = 200; // 色相の最大値（0から360の範囲）
 
 function setup() {
   createCanvas(canvasWidth, canvasHeight);
@@ -57,19 +57,27 @@ function initializeBubble() {
   velocities = [];
   springs = [];
 
+  let angleRanges = [];
+  let numRanges = random(2, 6); // ランダムな数の角度範囲を生成
+
+  for (let i = 0; i < numRanges; i++) {
+    let startAngle = random(0, TWO_PI);
+    let endAngle = random(startAngle, startAngle + TWO_PI);
+    let maxOffset = random(0.2, 0.4);
+    angleRanges.push({ startAngle, endAngle, maxOffset });
+  }
+
   for (let i = 0; i < N; i++) {
     let angle = i * (TWO_PI / N);
     let point = createVector(bubbleRadius * cos(angle), bubbleRadius * sin(angle));
     point = applyRandomOffset(point, angle);
-    
-    // applyAngleBasedOffsetを複数回適用
-    for (let j = 0; j < 3; j++) {
-      let startAngle = random(0, PI);
-      let endAngle = random(startAngle, TWO_PI);
-      let maxOffset = bubbleRadius * random(0.1, 0.5);
+
+    for (let j = 0; j < angleRanges.length; j++) {
+      let { startAngle, endAngle, maxOffset } = angleRanges[j];
+      maxOffset *= bubbleRadius;
       point = applyAngleBasedOffset(point, angle, startAngle, endAngle, maxOffset);
     }
-    
+
     points.push(point);
     velocities.push(createVector(0, 0));
   }
@@ -93,14 +101,13 @@ function applyAngleBasedOffset(point, angle, startAngle, endAngle, maxOffset) {
   let offset = 0;
   if (angle >= startAngle && angle <= endAngle) {
     let normalizedAngle = (angle - startAngle) / (endAngle - startAngle);
-    offset = maxOffset * Math.sin(normalizedAngle * PI * offsetFrequency);
+    offset = maxOffset * Math.sin(normalizedAngle * Math.PI);
   }
 
-  let x = point.x + offset * cos(angle);
-  let y = point.y + offset * sin(angle);
-  return createVector(x, y);
+  let direction = createVector(cos(angle), sin(angle));
+  direction.mult(offset);
+  return p5.Vector.add(point, direction);
 }
-
 function updateBubble() {
   centerPoint = calculateCenterPoint();
 
@@ -114,9 +121,24 @@ function updateBubble() {
     let acceleration = p5.Vector.div(totalForce, m);
     velocities[i].add(p5.Vector.mult(acceleration, dt));
     points[i].add(p5.Vector.mult(velocities[i], dt));
+
+    // キャンバスの壁との衝突判定
+    if (points[i].x < -width / 2 + pointRadius) {
+      points[i].x = -width / 2 + pointRadius;
+      velocities[i].x *= -1;
+    } else if (points[i].x > width / 2 - pointRadius) {
+      points[i].x = width / 2 - pointRadius;
+      velocities[i].x *= -1;
+    }
+    if (points[i].y < -height / 2 + pointRadius) {
+      points[i].y = -height / 2 + pointRadius;
+      velocities[i].y *= -1;
+    } else if (points[i].y > height / 2 - pointRadius) {
+      points[i].y = height / 2 - pointRadius;
+      velocities[i].y *= -1;
+    }
   }
 }
-
 function calculateCenterPoint() {
   let sum = createVector(0, 0);
   for (let i = 0; i < N; i++) {
