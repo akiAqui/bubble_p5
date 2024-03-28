@@ -1,13 +1,14 @@
-
 const N = 200;  // 泡を構成する点の数
 const m = 0.1;  // 各点の質量(kg)
 const k = 0.01; // 隣り合う点間のばね定数
-const l = 0.001; // 重心と各点間のばね定数
-const pointRadius = 5; // 点の半径
+const l = 0.01; // 重心と各点間のばね定数
+const pointRadius = 1; // 点の半径
 const canvasWidth = 800; // キャンバスの幅
 const canvasHeight = 600; // キャンバスの高さ
-const maxOffset = 50; // 中心からmaxOffsetの距離をsinカーブで付与するときの最大値
 const offsetFrequency = 1; // 中心からmaxOffsetの距離をsinカーブで付与するときの周波数
+const dt = 0.1; // 時間の刻み幅
+const P = 10; // 角度のずれの最大値を決めるパラメータ
+const Q = 30; // 中心からの距離のずれの最大値を決めるパラメータ
 
 let points = [];
 let velocities = [];
@@ -16,15 +17,20 @@ let centerPoint;
 let bubbleRadius;
 let isSimulating = false;
 
+let pointColors = [];
+let lineColors = [];
+
+let minHue = 0;   // 色相の最小値（0から360の範囲）
+let maxHue = 180; // 色相の最大値（0から360の範囲）
 
 function setup() {
-    createCanvas(canvasWidth, canvasHeight);
-    background('#111111');
-    bubbleRadius = min(canvasWidth, canvasHeight) / 4;
-    centerPoint = createVector(0, 0);
-    initializeBubble();
+  createCanvas(canvasWidth, canvasHeight);
+  bubbleRadius = min(canvasWidth, canvasHeight) / 4;
+  centerPoint = createVector(0, 0);
+  colorMode(HSB, 360, 100, 100); // カラーモードをHSBに変更
+  initializeColors();
+  initializeBubble();
 }
-
 
 function draw() {
   background(0);
@@ -54,8 +60,16 @@ function initializeBubble() {
   for (let i = 0; i < N; i++) {
     let angle = i * (TWO_PI / N);
     let point = createVector(bubbleRadius * cos(angle), bubbleRadius * sin(angle));
-    point = applyRandomOffset(point);
-    point = applyAngleBasedOffset(point, angle);
+    point = applyRandomOffset(point, angle);
+    
+    // applyAngleBasedOffsetを複数回適用
+    for (let j = 0; j < 3; j++) {
+      let startAngle = random(0, PI);
+      let endAngle = random(startAngle, TWO_PI);
+      let maxOffset = bubbleRadius * random(0.1, 0.5);
+      point = applyAngleBasedOffset(point, angle, startAngle, endAngle, maxOffset);
+    }
+    
     points.push(point);
     velocities.push(createVector(0, 0));
   }
@@ -67,18 +81,15 @@ function initializeBubble() {
   }
 }
 
-function applyRandomOffset(point) {
+function applyRandomOffset(point, angle) {
   let offsetAngle = random(0, TWO_PI / (N * P));
   let offsetRadius = random(0, bubbleRadius / Q);
-  let x = point.x + offsetRadius * cos(offsetAngle);
-  let y = point.y + offsetRadius * sin(offsetAngle);
+  let x = point.x + offsetRadius * cos(angle + offsetAngle);
+  let y = point.y + offsetRadius * sin(angle + offsetAngle);
   return createVector(x, y);
 }
 
-function applyAngleBasedOffset(point, angle) {
-  let startAngle = PI / 2;  // ずれを適用する角度の始まり
-  let endAngle = PI;        // ずれを適用する角度の終わり
-
+function applyAngleBasedOffset(point, angle, startAngle, endAngle, maxOffset) {
   let offset = 0;
   if (angle >= startAngle && angle <= endAngle) {
     let normalizedAngle = (angle - startAngle) / (endAngle - startAngle);
@@ -145,20 +156,59 @@ function createSpring(startIndex, endIndex, k, restLength) {
   };
 }
 
+function initializeColors() {
+  pointColors = [];
+  lineColors = [];
+
+  for (let i = 0; i < N; i++) {
+    pointColors.push(getColorInRange(minHue, maxHue));
+  }
+
+  for (let i = 0; i < N; i++) {
+    lineColors.push(getColorInRange(minHue, maxHue));
+  }
+}
+
+function getColorInRange(minHue, maxHue) {
+  let hue = random(minHue, maxHue);
+  let saturation = random(80, 100); // 彩度の範囲を指定（80から100）
+  let brightness = random(80, 100); // 明度の範囲を指定（80から100）
+  return color(hue, saturation, brightness);
+}
+
 function drawBubble() {
-  stroke(255);
   noFill();
 
   beginShape();
   for (let i = 0; i < N; i++) {
     let point = points[i];
+    let pointColor = pointColors[i];
+    stroke(pointColor);
+    circle(point.x, point.y, pointRadius * 2);
     vertex(point.x, point.y);
   }
   endShape(CLOSE);
 
   for (let i = 0; i < N; i++) {
-    let point = points[i];
-    fill(255);
-    circle(point.x, point.y, pointRadius * 2);
+    let startPoint = points[i];
+    let endPoint = points[(i + 1) % N];
+    let startColor = lineColors[i];
+    let endColor = lineColors[(i + 1) % N];
+    drawGradientLine(startPoint, endPoint, startColor, endColor);
+  }
+}
+
+function drawGradientLine(startPoint, endPoint, startColor, endColor) {
+  let distance = p5.Vector.dist(startPoint, endPoint);
+  let stepSize = 1;
+  let stepCount = distance / stepSize;
+
+  for (let i = 0; i < stepCount; i++) {
+    let t = i / stepCount;
+    let x = lerp(startPoint.x, endPoint.x, t);
+    let y = lerp(startPoint.y, endPoint.y, t);
+    let interpolatedColor = lerpColor(startColor, endColor, t);
+    stroke(interpolatedColor);
+    point(x, y);
   }
 }
